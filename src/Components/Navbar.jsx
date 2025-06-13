@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import Login from "./Login"; // sökväg till Login.jsx
+import loyaltyChatImg from '../assets/loyaltyChat.png';
 
 // Navbar komponent för att göra komponenterna så små som möjligt och bryta ut dem.
 const Navbar = () => {
@@ -18,7 +19,12 @@ const Navbar = () => {
     <div className="relative">
       <ul className="flex items-center list-none p-4 bg-gray-100 rounded w-full">
         <li className="text-gray-700 mr-6 flex items-center cursor-pointer">
-          Logotyp
+          <img
+  src={loyaltyChatImg}
+  alt="Loyalty Chat"
+  className="w-11 h-11 rounded-sm object-cover"
+/>
+
         </li>
         <li className="text-gray-700 mr-6 flex items-center cursor-pointer">
           Placeholder

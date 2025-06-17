@@ -1,5 +1,6 @@
 const Login = ({ onClose }) => {
   //Komponent som heter Login för att bryta ut och göra mindre komponenter.
+  // med en props "onClose"
   return (
     <>
       {/* Bakgrund för modal, genomskinlig overlay */}

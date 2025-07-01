@@ -1,12 +1,7 @@
 import { useState } from "react";
-import Start from "./Pages/Start";
 
 function App() {
-  return (
-    <>
-      <Start />
-    </>
-  );
+  return <>Hej</>;
 }
 
 export default App;

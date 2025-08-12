@@ -57,3 +57,62 @@
 // };
 
 // export default Navbar;
+
+// En enkel SideNav som visar användarnamn + avatar och har en logout-knapp.
+// Denna komponent kan du lägga på sidor som Chat/Profile.
+
+import { getAuth, clearAuth } from "../utils/token";
+import { useNavigate } from "react-router-dom";
+
+export default function SideNav() {
+  const { user } = getAuth(); // hämta användaren från localStorage
+  const navigate = useNavigate(); // för att kunna skicka tillbaka till /login
+
+  const handleLogout = () => {
+    clearAuth(); // rensa token + user från localStorage
+    navigate("/login"); // gå till login-sidan
+  };
+
+  return (
+    <aside className="w-56 min-h-screen border-r p-4 flex flex-col gap-6">
+      {/* Visa avatar (bild) – se till att CSP tillåter domänen */}
+      <div className="flex items-center gap-3">
+        <img
+          src={user?.avatar || "https://i.pravatar.cc/200"} // använd sparad avatar eller fallback
+          alt="avatar"
+          className="w-10 h-10 rounded-full object-cover"
+        />
+        <div>
+          <p className="font-semibold">{user?.username || "Användare"}</p>
+          <p className="text-xs text-gray-500">Inloggad</p>
+        </div>
+      </div>
+
+      {/* Meny */}
+      <nav className="flex flex-col gap-2">
+        <button
+          onClick={() => navigate("/profile")}
+          className="text-left hover:underline"
+        >
+          Profile
+        </button>
+        <button
+          onClick={() => navigate("/chat")}
+          className="text-left hover:underline"
+        >
+          Chat
+        </button>
+      </nav>
+
+      {/* Logout-knapp längst ned */}
+      <div className="mt-auto">
+        <button
+          onClick={handleLogout}
+          className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-2 rounded"
+        >
+          Logga ut
+        </button>
+      </div>
+    </aside>
+  );
+}

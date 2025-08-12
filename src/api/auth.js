@@ -1,54 +1,54 @@
-// Denna funktion hämtar en CSRF-token från servern.
-// Denna token behövs för att kunna skicka POST/PUT/DELETE-anrop till API:et.
-// CSRF-token skyddar API:et från att någon annan hemsida försöker skicka skadliga förfrågningar.
-// När man kallar på denna funktion, får man en cookie som heter "XSRF-TOKEN".
+// Den här filen innehåller funktioner som pratar med Chatify-API:t.
+// Vi gör små, tydliga funktioner som du kan återanvända i dina komponenter.
 
+// ===== 1) Hämta CSRF-token från API =====
 export async function getCsrfToken() {
-  // Vi använder fetch för att göra ett HTTP-anrop till servern.
+  // Vi använder fetch för att anropa servern.
+  // Enligt Swagger ska vi PATCH:a /csrf för att få en csrfToken tillbaka.
   const res = await fetch("https://chatify-api.up.railway.app/csrf", {
-    method: "PATCH", // "PATCH" betyder att vi begär en ändring, här används det för att skapa en CSRF-token.
-    credentials: "include", // Detta gör att cookies (som CSRF-token) sparas i webbläsaren (cookies) automatiskt och skickas med.
+    method: "PATCH", // PATCH = "gör en liten ändring" (här: generera/uppdatera en CSRF-token)
+    credentials: "include", // Skicka med cookies om servern vill använda dem internt (skadar inte här)
   });
 
-  // Efter att vi har fått ett svar från servern (res), så kollar vi om det gick bra.
-  // Om svaret inte är lyckat (t.ex. 403, 500), så kastar vi ett fel
+  // res.ok är true om svaret har statuskod 200–299 (dvs lyckat).
   if (!res.ok) {
-    throw new Error("Kunde inte hämta CSRF-token"); // Ett enkelt felmeddelande som du kan fånga
+    // Om status inte är lyckad, kastar vi ett Error så att komponenten kan fånga det och visa fel.
+    throw new Error("Kunde inte hämta CSRF-token");
   }
 
-  // Om det gick bra behöver vi inte returnera något, webbläsaren sparar cookien automatiskt
+  // Vi förväntar oss JSON tillbaka, t.ex. { "csrfToken": "uuid-här" } enligt Swagger-bilden.
+  const data = await res.json(); // Gör om svaret från text -> JS-objekt
+  return data.csrfToken; // Returnera bara själva token-strängen (enkelt att använda)
 }
 
-// === Logga in och få JWT ===
+// ===== 2) Logga in och få JWT-token =====
 export async function loginUser({ username, password, csrfToken }) {
-  // Denna funktion skickar användarnamn + lösenord till API:et för att få ett JWT (inloggnings-token).
-  // Vi kräver att en CSRF-token skickas in (som vi hämtade via getCsrfToken + getCookie).
+  // Denna funktion skickar inloggningsuppgifter + csrfToken i BODY (inte i headers).
+  // Precis så som Swagger-exemplet visar.
 
-  // Skicka POST till /auth/token med credentials
   const res = await fetch("https://chatify-api.up.railway.app/auth/token", {
-    method: "POST", // POST = vi skickar data för att "skapa" en login-session/token
+    method: "POST", // POST = "skapa/utför" en login-operation på servern
     headers: {
-      "Content-Type": "application/json", // Talar om att vi skickar JSON-data
-      "X-CSRF-Token": csrfToken, // Mycket viktigt! Annars får vi 403 (förbjudet)
+      "Content-Type": "application/json", // Vi talar om att vi skickar JSON i body
     },
-    credentials: "include", // Se till att cookies används (bra vana när CSRF är inblandat)
+    credentials: "include", // Låt cookies flöda om servern vill använda dem (safe)
     body: JSON.stringify({
-      // Gör om JS-objekt till en JSON-sträng
-      username, // Användarnamn från formuläret
-      password, // Lösenord från formuläret
+      // Gör om vårt JS-objekt till en JSON-sträng (krav för body)
+      username, // Användarnamnet användaren skrev in i formuläret
+      password, // Lösenordet från formuläret
+      csrfToken, // Viktigt: CSRF-token som vi nyss hämtade från /csrf
     }),
   });
 
-  // Läs ut svaret som JSON så vi kan titta på det
-  const data = await res.json().catch(() => ({})); // .catch för att undvika krasch om tomt svar
+  // Försök läsa svaret som JSON (kan innehålla { token: "...", message: "..." })
+  const data = await res.json().catch(() => ({})); // Fallback till tomt obj om ingen JSON
 
-  // Om status inte är 2xx så kastar vi ett fel med meddelandet från API:et (t.ex. "Invalid credentials")
+  // Om status inte är 2xx vill vi kasta ett fel med bra meddelande till användaren.
   if (!res.ok) {
-    // Om API:et skickar ett meddelande så använd det, annars fallback
-    const message = data?.message || "Inloggning misslyckades";
-    throw new Error(message);
+    // API:t skickar ofta "Invalid credentials" vid fel – visa det om det finns.
+    throw new Error(data?.message || "Inloggning misslyckades");
   }
 
-  // Om allt gick bra returnerar vi svaret (borde innehålla JWT-token och ev. annan info)
-  return data; // ex: { token: "eyJhbGciOi...", ... }
+  // Om allt gick bra returnerar vi svaret (borde innehålla t.ex. { token: "JWT..." }).
+  return data;
 }

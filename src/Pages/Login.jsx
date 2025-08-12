@@ -1,142 +1,139 @@
-// Reacts useState och useEffect – för att spara formulärdata och reagera på sidladdning
-import { useEffect, useState } from "react";
-
-// Våra API- och hjälpfunktioner
-import { getCsrfToken, loginUser } from "../api/auth"; // hämta CSRF och logga in
-import { getCookie, saveAuth, getAuth } from "../utils/token"; // cookies och localStorage
-import { decodeJwt } from "../utils/jwt"; // läsa ut info ur JWT
-
-// useNavigate för att kunna redirecta användaren efter login
+// Vi importerar React-hooks för att hantera state (formdata, fel, loading) och navigering.
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+// Vi importerar våra API-funktioner vi just gjorde.
+import { getCsrfToken, loginUser } from "../api/auth";
+
+// Hjälpare för att spara/hämta auth-info (token + user) i localStorage.
+import { saveAuth, getAuth } from "../utils/token";
+
+// Enkel JWT-dekodare för att plocka ut fält ur token (t.ex. userId, username, avatar).
+import { decodeJwt } from "../utils/jwt";
+
 export default function Login() {
-  // form-objekt som håller det användaren skriver in
+  // form = håller värdena från inputfälten (användarnamn + lösenord)
   const [form, setForm] = useState({
-    username: "", // användarnamn från input
-    password: "", // lösenord från input
+    username: "", // texten som skrivs i användarnamn-fältet
+    password: "", // texten som skrivs i lösenords-fältet
   });
 
-  // UI-states för fel/success och "laddning" (disable knapp etc.)
-  const [error, setError] = useState(""); // visar felmeddelanden (t.ex. "Invalid credentials")
-  const [loading, setLoading] = useState(false); // visar att vi jobbar (för att undvika dubbelklick)
-  const navigate = useNavigate(); // används för att byta sida (t.ex. till /chat)
+  // error = sträng för felmeddelanden (visas under knappen t.ex.)
+  const [error, setError] = useState("");
 
-  // När sidan laddar: om vi redan har en token i localStorage -> gå direkt till /chat
+  // loading = true när vi väntar på servern (hindrar dubbelklick + visar "Loggar in...")
+  const [loading, setLoading] = useState(false);
+
+  // navigate = funktion för att byta sida (t.ex. till /chat efter lyckad login)
+  const navigate = useNavigate();
+
+  // useEffect körs när komponenten laddas. Här kollar vi om vi redan har en token sparad.
   useEffect(() => {
-    // Läs auth-data från localStorage
-    const { token } = getAuth(); // plocka ut token om det finns
-
-    // Om token finns -> användaren är redan "inloggad"
+    const { token } = getAuth(); // Läs från localStorage om det finns en auth_token sedan innan
     if (token) {
-      navigate("/chat"); // skicka användaren till chatten
+      // Om token redan finns betyder det att användaren är "inloggad" – skicka till /chat direkt.
+      navigate("/chat", { replace: true }); // replace = byt sida utan att lägga till i historiken
     }
-  }, [navigate]); // körs en gång (eller när navigate referens ändras)
+  }, [navigate]); // Lägg navigate som dependency (good practice)
 
-  // Uppdatera form-state när användaren skriver i fält
+  // Denna funktion körs varje gång användaren skriver i ett inputfält.
   const handleChange = (e) => {
     // e.target.name är "username" eller "password"
-    // e.target.value är det som skrivits in
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value })); // kopiera det gamla och uppdatera fältet
+    // e.target.value är det nya värdet i fältet
+    setForm((prev) => ({
+      ...prev, // kopiera gamla värden
+      [e.target.name]: e.target.value, // ersätt bara det fält som ändrades
+    }));
   };
 
-  // När användaren trycker på "Logga in"
+  // Denna funktion körs när man klickar på "Logga in"-knappen (submit på formuläret).
   const handleSubmit = async (e) => {
-    e.preventDefault(); // stoppa webbläsarens standardbeteende (som laddar om sidan)
-
-    // Rensa ev. gamla fel
-    setError(""); // ta bort tidigare fel
-    setLoading(true); // visa att vi jobbar (t.ex. disable knappen)
+    e.preventDefault(); // Stoppa webbläsarens default (som är att ladda om sidan)
+    setError(""); // Rensa gamla felmeddelanden
+    setLoading(true); // Visa att vi jobbar (disable knapp etc.)
 
     try {
-      // 1) Hämta CSRF först (så vi får rätt cookie)
-      await getCsrfToken(); // genererar/uppdaterar XSRF-TOKEN i cookies
+      // 1) Hämta CSRF-token från servern (enligt Swagger ska den skickas i BODY sen)
+      const csrfToken = await getCsrfToken(); // returvärdet är en sträng, t.ex. "d412e5c1-...."
 
-      // 2) Läs ut token-värdet från cookie så vi kan skicka den i headern
-      const csrfToken = getCookie("XSRF-TOKEN"); // hämta cookie-värdet
-      if (!csrfToken) {
-        // Om vi inte hittar cookien, kasta ett fel
-        throw new Error("Kunde inte hitta CSRF-token i cookies");
-      }
-
-      // 3) Anropa API för att logga in (POST /auth/token)
+      // 2) Anropa login med username + password + CSRF-token i body
       const data = await loginUser({
-        username: form.username, // skicka användarnamn från formuläret
-        password: form.password, // skicka lösenord från formuläret
-        csrfToken, // skicka med CSRF-värdet i header (sker i loginUser)
+        username: form.username, // värdet från inputfältet
+        password: form.password, // värdet från inputfältet
+        csrfToken, // token vi precis hämtade
       });
 
-      // Förväntat: data.token = JWT-string
+      // 3) API:t borde skicka tillbaka ett JWT-token (dvs en lång textsträng)
       const token = data?.token; // plocka ut token från svaret
 
+      // Om token saknas kan vi inte gå vidare – kasta ett begripligt fel.
       if (!token) {
-        // Om inget token kom tillbaka – något är fel
         throw new Error("Token saknas i svaret från servern");
       }
 
-      // 4) Dekoda JWT för att få ut användarinfo (t.ex. userId, username, avatar)
-      const payload = decodeJwt(token); // { sub/userId, username, avatar, exp, ... } beroende på API
-      // OBS: Se i praktiken vilka fält Chatify-tokenen har. Nedan gör vi rimliga antaganden:
+      // 4) Dekoda JWT för att få ut användarinfo (fältens namn kan variera mellan API:n)
+      const payload = decodeJwt(token); // t.ex. { userId: "...", username: "...", avatar: "...", exp: 12345 }
 
-      // Bygg ett "user"-objekt att spara. Använd de fält som finns i ditt JWT.
+      // 5) Bygg ett user-objekt som vi sparar i localStorage tillsammans med token.
       const user = {
-        id: payload?.userId || payload?.sub || null, // fallback om namnen skiljer sig
-        username: payload?.username || form.username,
-        avatar: payload?.avatar || "https://i.pravatar.cc/200", // fallback-bild om JWT saknar avatar
+        id: payload?.userId || payload?.sub || null, // vissa token använder "sub" som id
+        username: payload?.username || form.username, // använd JWT:ens username eller fallback till inmatat
+        avatar: payload?.avatar || "https://i.pravatar.cc/200", // fallback-bild om fält saknas
       };
 
-      // 5) Spara token + user i localStorage så vi är inloggade även efter reload
+      // 6) Spara token + user i localStorage så att man förblir inloggad vid reload.
       saveAuth({ token, user });
 
-      // 6) Skicka användaren vidare till chatten (eller vart du vill)
-      navigate("/chat"); // success – vidare till chatten!
+      // 7) Skicka användaren till chatten nu när allt är klart.
+      navigate("/chat");
     } catch (err) {
-      // Om något gick snett (fel lösenord, nätverksfel, etc.)
-      setError(err.message || "Något gick fel"); // visa felmeddelandet i UI
+      // Om något går fel (fel lösenord, serverfel, nätverksfel…), visa ett enkelt felmeddelande.
+      setError(err.message || "Något gick fel");
     } finally {
-      // Detta körs alltid – oavsett om try lyckades eller catch kördes
-      setLoading(false); // stäng av "laddar"-läget
+      // finally körs alltid, oavsett om try lyckades eller catch kördes.
+      setLoading(false); // Stäng av "laddar"-läget
     }
   };
 
+  // JSX = det vi ritar ut på sidan (formulär + knappar + feltext)
   return (
-    // Formulärcontainer med lite Tailwind-styling
     <form onSubmit={handleSubmit} className="max-w-sm mx-auto mt-10 space-y-4">
-      {/* Rubrik */}
+      {/* Rubrik överst */}
       <h1 className="text-2xl font-bold">Logga in</h1>
 
-      {/* Användarnamn-fält */}
+      {/* Fält för användarnamn */}
       <input
-        type="text" // text-input
-        name="username" // kopplar till form.username
-        placeholder="Användarnamn" // hjälptext i fältet
-        value={form.username} // visa nuvarande värde från state
+        type="text" // textfält
+        name="username" // kopplas till form.username
+        placeholder="Användarnamn" // grå hjälptext i fältet
+        value={form.username} // visa värdet från state
         onChange={handleChange} // uppdatera state när man skriver
         className="border w-full p-2 rounded"
-        autoComplete="username" // låt webbläsaren hjälpa till
+        autoComplete="username" // webbläsaren kan föreslå inmatningar
       />
 
-      {/* Lösenords-fält */}
+      {/* Fält för lösenord */}
       <input
-        type="password" // döljer texten
-        name="password" // kopplar till form.password
+        type="password" // döljer texten (prickar)
+        name="password" // kopplas till form.password
         placeholder="Lösenord" // hjälptext
-        value={form.password} // visa nuvarande värde
-        onChange={handleChange} // uppdatera state
+        value={form.password} // visa värdet från state
+        onChange={handleChange} // uppdatera state när man skriver
         className="border w-full p-2 rounded"
         autoComplete="current-password" // webbläsarhjälp
       />
 
-      {/* Submit-knapp */}
+      {/* Knappen som skickar formuläret */}
       <button
-        type="submit" // skickar formuläret
+        type="submit" // triggar handleSubmit
         disabled={loading} // stäng av knappen när vi jobbar
         className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-60"
       >
         {loading ? "Loggar in..." : "Logga in"}{" "}
-        {/* visa "Loggar in..." när loading=true */}
+        {/* Visa text beroende på state */}
       </button>
 
-      {/* Visa felmeddelande om något gick snett */}
+      {/* Visa felmeddelande under knappen om något gick fel */}
       {error && <p className="text-red-500">{error}</p>}
     </form>
   );

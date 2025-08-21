@@ -6,6 +6,7 @@ import { authFetch } from "./http";
 /**
  * Liten hjälpare: gör text säker för HTML (XSS-skydd på klientsidan).
  * Backend bör också sanera, men detta är ett extra lager.
+ * detta är saniteringen.
  */
 export function escapeHTML(str) {
   return String(str)

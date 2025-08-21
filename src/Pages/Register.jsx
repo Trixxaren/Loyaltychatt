@@ -1,7 +1,6 @@
 // Vår sida för att skapa konto / Sidan där man registrerar sig
 import { useState } from "react";
 import { getCsrfToken } from "../api/auth";
-import { getCookie } from "../utils/token";
 
 export default function Register() {
   // form = ett objekt som sparar det användaren skriver in
